@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>VN Student Planner — HTML</title>
+  <style>
+    :root{
+      --bg:#f4f6f8; --card:#fff; --muted:#6b7280; --accent:#0ea5a4; --danger:#ef4444;
+    }
+    *{box-sizing:border-box}
+    body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial; margin:0; background:var(--bg); color:#0f172a}
+    .wrap{max-width:1100px;margin:28px auto;padding:18px}
+    header{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:18px}
+    h1{margin:0;font-size:20px}
+    .sub{color:var(--muted);font-size:13px}
+    .controls{display:flex;gap:8px;align-items:center}
+    input[type="text"], input[type="search"], select, input[type="datetime-local"], textarea, input[type="number"]{padding:8px;border:1px solid #e6e9ee;border-radius:8px;font-size:14px}
+    button{cursor:pointer;border:1px solid #e6e9ee;background:var(--card);padding:8px 10px;border-radius:8px}
+    .btn-primary{background:var(--accent);color:white;border-color:transparent}
+    .btn-danger{background:transparent;color:var(--danger);border-color:var(--danger)}
+    .panel{background:var(--card);padding:12px;border-radius:12px;box-shadow:0 1px 4px rgba(2,6,23,0.06)}
+    .toolbar{display:flex;gap:8px;align-items:center}
+    .grid{display:grid;gap:12px}
+    .grid.cards{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
+    .task-card{padding:12px;border-radius:10px;border:1px solid #eef2f7;background:linear-gradient(180deg,#fff,#fcfeff)}
+    .task-title{font-weight:600;margin-bottom:6px}
+    .muted{color:var(--muted);font-size:13px}
+    .small{font-size:12px}
+    .flex{display:flex;align-items:center;gap:8px}
+    .space-between{display:flex;justify-content:space-between;align-items:center}
+    .tag{padding:6px 8px;border-radius:999px;border:1px solid #e6eef0;font-size:12px}
+    .calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+    .cal-cell{min-height:92px;padding:8px;border-radius:8px;border:1px dashed #eef3f6;background:linear-gradient(180deg,#fff,#fbfeff);cursor:pointer}
+    .cal-other{opacity:0.45}
+    .cal-day{display:flex;justify-content:space-between;align-items:center}
+    .modal-back{position:fixed;inset:0;background:rgba(2,6,23,0.45);display:flex;align-items:flex-start;justify-content:center;padding:28px;z-index:60}
+    .modal{width:100%;max-width:720px;background:var(--card);padding:18px;border-radius:12px}
+    .row{display:flex;gap:8px}
+    .col{flex:1}
+    footer{margin-top:18px;color:var(--muted);font-size:13px}
+    @media (max-width:720px){.row{flex-direction:column}}
+    /* tiny utility */
+    .pill{padding:6px 8px;border-radius:999px;border:1px solid #e6eef0;font-size:12px}
+    .btn-small{padding:6px 8px;border-radius:8px;font-size:13px}
+    .done{opacity:0.6;text-decoration:line-through}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>VN Student Planner</h1>
+        <div class="sub">Quản lý nhiệm vụ, lịch và nhóm theo môn cho sinh viên đại học (localStorage)</div>
+      </div>
+
+      <div class="controls">
+        <input id="search" type="search" placeholder="Search tasks or notes..." />
+        <select id="filterCourse"><option>All</option></select>
+        <div class="toolbar panel">
+          <button class="btn-small" data-view="List">List</button>
+          <button class="btn-small" data-view="Calendar">Calendar</button>
+          <button class="btn-small" data-view="Course">Course</button>
+          <button class="btn-small" data-view="Timeline">Timeline</button>
+        </div>
+        <button id="btnAdd" class="btn-primary">Add</button>
+        <div class="panel" style="display:flex;gap:8px;align-items:center">
+          <button id="exportJSON" class="btn-small">Export</button>
+          <label class="btn-small" style="cursor:pointer">
+            Import <input id="importFile" type="file" accept="application/json" style="display:none"/>
+          </label>
+        </div>
+      </div>
+    </header>
+
+    <main id="app">
+      <div class="sub" id="stats">Loading...</div>
+
+      <section id="viewArea" style="margin-top:12px"></section>
+
+      <section style="margin-top:14px" class="grid" id="extras">
+        <div class="panel">
+          <div style="display:flex;justify-content:space-between"><div class="small"><b>Quick stats</b></div>
+            <div class="small"><button id="seedBtn" class="btn-small">Seed 30</button> <button id="clearBtn" class="btn-small btn-danger">Clear</button></div>
+          </div>
+          <div style="margin-top:8px" id="quickStats" class="muted small"></div>
+        </div>
+        <div class="panel">
+          <div class="small"><b>Tips</b></div>
+          <ul class="muted small">
+            <li>Chia project lớn thành nhiều task nhỏ với durations.</li>
+            <li>Dùng Calendar để nhìn các ngày quá tải.</li>
+            <li>Nhóm theo môn để phân công việc nhóm hiệu quả.</li>
+          </ul>
+        </div>
+      </section>
+
+      <footer>
+        <div>Stored locally in your browser • Tasks support 20+ items (seeded)</div>
+      </footer>
+    </main>
+  </div>
+
+  <!-- Modal (hidden by default) -->
+  <div id="modalRoot" style="display:none"></div>
+
+<script>
+(() => {
+  const STORAGE_KEY = 'vn-student-planner-html-v1';
+
+  // Utility
+  const uid = () => Math.random().toString(36).slice(2,9);
+  const formatDate = (iso) => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleString('vi-VN', { dateStyle:'medium', timeStyle:'short' });
+  };
+  const dateOnlyISO = (iso) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    const y = d.getFullYear(); const m = String(d.getMonth()+1).padStart(2,'0'); const day = String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${day}`;
+  };
+  const daysUntil = (iso) => {
+    if (!iso) return null;
+    const now = new Date(); const d = new Date(iso);
+    const diff = Math.ceil((d - now)/(1000*60*60*24));
+    if (diff === 0) return 'today';
+    if (diff > 0) return diff + 'd';
+    return Math.abs(diff) + 'd ago';
+  };
+
+  // Seed generator
+  function seedTasks(n=30){
+    const courses = ['Cơ sở dữ liệu','Mạch điện tử','Giải tích','Lập trình C','Điện tử số','Hệ điều hành','Machine Learning','Đồ án'];
+    const pri = ['Low','Medium','High'];
+    const tasks = [];
+    for(let i=0;i<n;i++){
+      const due = new Date();
+      due.setDate(due.getDate() + Math.floor(Math.random()*45) - 5);
+      const duration = [30,45,60,90,120][Math.floor(Math.random()*5)];
+      tasks.push({
+        id: uid(),
+        title: `Task ${i+1} — ${courses[i % courses.length]}`,
+        notes: 'Mô tả ngắn cho nhiệm vụ này. Chỉnh sửa để phù hợp.',
+        course: courses[i % courses.length],
+        dueDate: due.toISOString(),
+        durationMinutes: duration,
+        priority: pri[Math.floor(Math.random()*pri.length)],
+        done: Math.random() > 0.6,
+        createdAt: new Date().toISOString(),
+      });
+    }
+    return tasks;
+  }
+
+  // State
+  let tasks = [];
+  let view = 'List'; // List, Calendar, Course, Timeline
+  let query = '';
+  let filterCourse = 'All';
+  let calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+
+  // DOM refs
+  const viewArea = document.getElementById('viewArea');
+  const stats = document.getElementById('stats');
+  const quickStats = document.getElementById('quickStats');
+  const filterCourseSelect = document.getElementById('filterCourse');
+  const searchInput = document.getElementById('search');
+  const modalRoot = document.getElementById('modalRoot');
+
+  // Load
+  function load(){
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      try{
+        tasks = JSON.parse(raw);
+      }catch(e){
+        tasks = seedTasks(30);
+      }
+    } else {
+      tasks = seedTasks(30);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    }
+  }
+  function save(){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+  }
+
+  // Derived
+  function allCourses(){
+    const s = new Set(tasks.map(t => t.course || 'Others'));
+    return ['All', ...Array.from(s)];
+  }
+  function filteredTasks(){
+    return tasks.filter(t => {
+      const q = query.trim().toLowerCase();
+      const matchesQ = !q || (t.title && t.title.toLowerCase().includes(q)) || (t.notes && t.notes.toLowerCase().includes(q));
+      const matchesCourse = filterCourse === 'All' || t.course === filterCourse;
+      return matchesQ && matchesCourse;
+    });
+  }
+
+  // CRUD
+  function addTask(payload){
+    tasks.unshift({ id: uid(), createdAt: new Date().toISOString(), ...payload });
+    save(); render();
+  }
+  function updateTask(id, patch){
+    tasks = tasks.map(t => t.id === id ? {...t, ...patch} : t);
+    save(); render();
+  }
+  function removeTask(id){
+    if(!confirm('Delete this task?')) return;
+    tasks = tasks.filter(t => t.id !== id);
+    save(); render();
+  }
+
+  // Export / import
+  document.getElementById('exportJSON').addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(tasks, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'vn-student-planner-tasks.json'; a.click();
+    URL.revokeObjectURL(url);
+  });
+  document.getElementById('importFile').addEventListener('change', (e) => {
+    const file = e.target.files[0]; if(!file) return;
+    const fr = new FileReader();
+    fr.onload = () => {
+      try{
+        const imported = JSON.parse(fr.result);
+        if(Array.isArray(imported)){
+          tasks = [...imported, ...tasks];
+          save(); render();
+          alert('Imported ' + imported.length + ' tasks.');
+        } else alert('JSON must be an array of tasks');
+      } catch(err){
+        alert('Invalid JSON file');
+      }
+    };
+    fr.readAsText(file);
+  });
+
+  // UI helpers
+  function setView(v){ view = v; document.querySelectorAll('[data-view]').forEach(b => { b.style.background = (b.dataset.view===v ? 'var(--accent)' : ''); b.style.color = (b.dataset.view===v? 'white':''); }); render(); }
+  document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+
+  // Renderers
+  function render(){
+    // update filters
+    populateCourseFilter();
+
+    const list = filteredTasks();
+    stats.innerHTML = `Showing <b>${list.length}</b> tasks • Stored locally`;
+    quickStats.innerHTML = `
+      Total tasks: <b>${tasks.length}</b><br>
+      Done: <b>${tasks.filter(t=>t.done).length}</b><br>
+      Upcoming (7d): <b>${tasks.filter(t=>{ const d=new Date(t.dueDate); const diff=(d - new Date())/(1000*60*60*24); return diff>=0 && diff<=7}).length}</b>
+    `;
+
+    if(view === 'List') renderList(list);
+    else if(view === 'Timeline') renderTimeline(list);
+    else if(view === 'Course') renderCourse(list);
+    else if(view === 'Calendar') renderCalendar();
+  }
+
+  function renderList(list){
+    const wrap = document.createElement('div');
+    wrap.className = 'grid cards';
+    list.slice(0,200).forEach(t => {
+      const card = document.createElement('div'); card.className='task-card';
+      if(t.done) card.classList.add('done');
+      card.innerHTML = `
+        <div class="space-between">
+          <div>
+            <div class="task-title">${escapeHtml(t.title)}</div>
+            <div class="muted">${escapeHtml(t.course || '—')} • ${formatDate(t.dueDate)}</div>
+          </div>
+          <div class="small muted">
+            ${t.priority || ''}<br>
+            <div style="margin-top:8px">
+              <button class="btn-small" data-action="toggle" data-id="${t.id}">${t.done ? 'Undo' : 'Done'}</button>
+              <button class="btn-small" data-action="edit" data-id="${t.id}">Edit</button>
+              <button class="btn-small btn-danger" data-action="delete" data-id="${t.id}">Delete</button>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:8px" class="muted small">${escapeHtml(t.notes || '')}</div>
+        <div style="margin-top:8px" class="small muted">Duration: ${t.durationMinutes || '—'} min</div>
+      `;
+      wrap.appendChild(card);
+    });
+    viewArea.innerHTML = ''; viewArea.appendChild(wrap);
+    // bind actions
+    viewArea.querySelectorAll('button[data-action]').forEach(b => {
+      const id = b.dataset.id; const act = b.dataset.action;
+      b.addEventListener('click', () => {
+        if(act === 'toggle') updateTask(id, { done: !tasks.find(x=>x.id===id).done });
+        else if(act === 'delete') removeTask(id);
+        else if(act === 'edit') openEditModal(id);
+      });
+    });
+  }
+
+  function renderTimeline(list){
+    const wrap = document.createElement('div'); wrap.className='grid';
+    const sorted = [...list].sort((a,b)=> new Date(a.dueDate||0) - new Date(b.dueDate||0));
+    sorted.forEach(t=>{
+      const row = document.createElement('div'); row.className='panel';
+      row.innerHTML = `
+        <div class="space-between">
+          <div>
+            <div class="task-title">${escapeHtml(t.title)}</div>
+            <div class="muted">${escapeHtml(t.course||'—')} • ${formatDate(t.dueDate)}</div>
+          </div>
+          <div class="small muted">
+            ${daysUntil(t.dueDate)}<br>
+            <div style="margin-top:8px">
+              <button class="btn-small" data-action="edit" data-id="${t.id}">Edit</button>
+              <button class="btn-small btn-danger" data-action="delete" data-id="${t.id}">Delete</button>
+            </div>
+          </div>
+        </div>
+      `;
+      wrap.appendChild(row);
+    });
+    viewArea.innerHTML=''; viewArea.appendChild(wrap);
+    viewArea.querySelectorAll('button[data-action]').forEach(b => {
+      const id = b.dataset.id; const act = b.dataset.action;
+      b.addEventListener('click', () => act==='delete' ? removeTask(id) : openEditModal(id));
+    });
+  }
+
+  function renderCourse(list){
+    const byCourse = {};
+    list.forEach(t => {
+      const k = t.course || 'Others';
+      (byCourse[k] = byCourse[k]||[]).push(t);
+    });
+    const wrap = document.createElement('div'); wrap.className='grid';
+    Object.entries(byCourse).forEach(([courseName, items])=>{
+      const block = document.createElement('div'); block.className='panel';
+      block.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center"><div><b>${escapeHtml(courseName)}</b> <span class="muted small">(${items.length})</span></div></div>`;
+      const grid = document.createElement('div'); grid.className='grid cards'; grid.style.marginTop='8px';
+      items.forEach(t=>{
+        const c = document.createElement('div'); c.className='task-card';
+        if(t.done) c.classList.add('done');
+        c.innerHTML = `<div class="task-title">${escapeHtml(t.title)}</div>
+          <div class="muted small">${formatDate(t.dueDate)}</div>
+          <div style="margin-top:8px" class="muted small">${escapeHtml(t.notes||'')}</div>
+          <div style="margin-top:8px">
+            <button class="btn-small" data-action="toggle" data-id="${t.id}">${t.done ? 'Undo' : 'Done'}</button>
+            <button class="btn-small" data-action="edit" data-id="${t.id}">Edit</button>
+            <button class="btn-small btn-danger" data-action="delete" data-id="${t.id}">Delete</button>
+          </div>`;
+        grid.appendChild(c);
+      });
+      block.appendChild(grid);
+      wrap.appendChild(block);
+    });
+    viewArea.innerHTML=''; viewArea.appendChild(wrap);
+    viewArea.querySelectorAll('button[data-action]').forEach(b => {
+      const id = b.dataset.id; const act = b.dataset.action;
+      b.addEventListener('click', ()=> {
+        if(act==='toggle') updateTask(id, { done: !tasks.find(x=>x.id===id).done });
+        if(act==='edit') openEditModal(id);
+        if(act==='delete') removeTask(id);
+      });
+    });
+  }
+
+  // Calendar utilities
+  function monthGrid(monthDate){
+    const start = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+    const firstWeekday = start.getDay();
+    const days = [];
+    for(let i=0;i<42;i++){
+      const d = new Date(start); d.setDate(1 + i - firstWeekday); days.push(d);
+    }
+    return days;
+  }
+  function tasksByDayMap(){
+    const map = {};
+    tasks.forEach(t=>{
+      if(!t.dueDate) return;
+      const key = dateOnlyISO(t.dueDate);
+      map[key] = map[key] || [];
+      map[key].push(t);
+    });
+    return map;
+  }
+
+  function renderCalendar(){
+    const month = calendarMonth;
+    const header = document.createElement('div'); header.className='panel'; header.style.display='flex'; header.style.justifyContent='space-between'; header.style.alignItems='center';
+    header.innerHTML = `<div><b>${month.toLocaleString('vi-VN',{month:'long', year:'numeric'})}</b></div>
+      <div style="display:flex;gap:8px">
+        <button id="prevMonth" class="btn-small">&lt; Prev</button>
+        <button id="todayMonth" class="btn-small">Today</button>
+        <button id="nextMonth" class="btn-small">Next &gt;</button>
+      </div>`;
+    const gridWrap = document.createElement('div'); gridWrap.style.marginTop='10px';
+    const weekhead = document.createElement('div'); weekhead.className='calendar-grid'; weekhead.style.gridTemplateColumns='repeat(7,1fr)'; weekhead.style.marginBottom='8px';
+    ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(d => { const el = document.createElement('div'); el.style.fontWeight='600'; el.style.textAlign='center'; el.textContent = d; weekhead.appendChild(el);});
+    const grid = document.createElement('div'); grid.className='calendar-grid';
+    const days = monthGrid(month);
+    const tmap = tasksByDayMap();
+    days.forEach(day=>{
+      const key = dateOnlyISO(day.toISOString());
+      const cell = document.createElement('div'); cell.className='cal-cell';
+      if(day.getMonth() !== month.getMonth()) cell.classList.add('cal-other');
+      const headerLine = document.createElement('div'); headerLine.className='cal-day';
+      const dayNumber = document.createElement('div'); dayNumber.textContent = day.getDate();
+      if(dateOnlyISO(new Date().toISOString()) === key) dayNumber.style.color = 'var(--accent)';
+      const count = document.createElement('div'); count.className='muted small'; count.textContent = (tmap[key]||[]).length;
+      headerLine.appendChild(dayNumber); headerLine.appendChild(count);
+      cell.appendChild(headerLine);
+      const list = document.createElement('div'); list.style.marginTop='8px'; list.style.fontSize='13px';
+      (tmap[key] || []).slice(0,3).forEach(t=>{
+        const li = document.createElement('div'); li.textContent = '• ' + t.title; li.style.whiteSpace='nowrap'; li.style.overflow='hidden'; li.style.textOverflow='ellipsis';
+        list.appendChild(li);
+      });
+      cell.appendChild(list);
+      cell.addEventListener('click', ()=> openDayTasks(key));
+      grid.appendChild(cell);
+    });
+    gridWrap.appendChild(weekhead); gridWrap.appendChild(grid);
+    viewArea.innerHTML=''; viewArea.appendChild(header); viewArea.appendChild(gridWrap);
+
+    document.getElementById('prevMonth').addEventListener('click', ()=>{ calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth()-1,1); render();});
+    document.getElementById('nextMonth').addEventListener('click', ()=>{ calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth()+1,1); render();});
+    document.getElementById('todayMonth').addEventListener('click', ()=>{ calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1); render();});
+  }
+
+  function openDayTasks(dateISO){
+    const items = tasks.filter(t => dateOnlyISO(t.dueDate) === dateISO);
+    let html = `<div style="display:flex;justify-content:space-between;align-items:center"><div><b>Tasks on ${dateISO}</b></div><div><button id="closeDay" class="btn-small">Close</button></div></div><div style="margin-top:8px">`;
+    items.forEach(t=>{
+      html += `<div class="task-card" style="margin-bottom:8px">
+        <div class="space-between"><div><div class="task-title">${escapeHtml(t.title)}</div><div class="muted small">${escapeHtml(t.course||'—')} • ${formatDate(t.dueDate)}</div></div>
+          <div class="small muted"><button class="btn-small" data-id="${t.id}" data-act="edit">Edit</button> <button class="btn-small btn-danger" data-id="${t.id}" data-act="delete">Delete</button></div>
+        </div>
+        <div style="margin-top:8px" class="muted small">${escapeHtml(t.notes||'')}</div>
+      </div>`;
+    });
+    html += '</div>';
+    showModal('Day tasks', html, () => {});
+    document.getElementById('closeDay').addEventListener('click', closeModal);
+    document.querySelectorAll('[data-act]').forEach(b => {
+      b.addEventListener('click', ()=> {
+        const id = b.dataset.id; const a = b.dataset.act;
+        closeModal();
+        if(a==='edit') openEditModal(id); else if(a==='delete') removeTask(id);
+      });
+    });
+  }
+
+  // Modal helpers
+  function showModal(title, innerHTML, onClose){
+    modalRoot.style.display = 'block';
+    modalRoot.innerHTML = `<div class="modal-back"><div class="modal">
+      <div style="display:flex;justify-content:space-between;align-items:center"><div><b>${escapeHtml(title)}</b></div><div><button id="closeModal" class="btn-small">Close</button></div></div>
+      <div style="margin-top:10px">${innerHTML}</div>
+    </div></div>`;
+    document.getElementById('closeModal').addEventListener('click', ()=>{ closeModal(); if(onClose) onClose();});
+  }
+  function closeModal(){ modalRoot.style.display='none'; modalRoot.innerHTML=''; }
+
+  function openAddModal(){
+    const html = `
+      <div class="row">
+        <div class="col">
+          <input id="mTitle" placeholder="Tiêu đề" type="text" style="width:100%"/>
+        </div>
+        <div style="width:160px">
+          <input id="mCourse" placeholder="Môn / Nhóm" type="text" style="width:100%"/>
+        </div>
+      </div>
+      <div style="margin-top:8px" class="row">
+        <div class="col">
+          <label class="muted small">Due date (local)</label>
+          <input id="mDue" type="datetime-local" style="width:100%"/>
+        </div>
+        <div style="width:140px">
+          <label class="muted small">Duration (min)</label>
+          <input id="mDuration" type="number" min="5" step="5" value="60" style="width:100%"/>
+        </div>
+        <div style="width:120px">
+          <label class="muted small">Priority</label>
+          <select id="mPriority" style="width:100%"><option>Low</option><option selected>Medium</option><option>High</option></select>
+        </div>
+      </div>
+      <div style="margin-top:8px">
+        <textarea id="mNotes" rows="4" placeholder="Ghi chú" style="width:100%"></textarea>
+      </div>
+      <div style="margin-top:10px;display:flex;justify-content:flex-end;gap:8px">
+        <button id="mCancel" class="btn-small">Cancel</button>
+        <button id="mSave" class="btn-primary">Save</button>
+      </div>
+    `;
+    showModal('Add task', html, ()=>{});
+    document.getElementById('mCancel').addEventListener('click', closeModal);
+    document.getElementById('mSave').addEventListener('click', ()=>{
+      const payload = {
+        title: (document.getElementById('mTitle').value||'').trim(),
+        notes: document.getElementById('mNotes').value||'',
+        course: (document.getElementById('mCourse').value||'Lớp chung').trim(),
+        dueDate: (()=>{ const v=document.getElementById('mDue').value; return v ? new Date(v).toISOString() : null; })(),
+        durationMinutes: Number(document.getElementById('mDuration').value) || 60,
+        priority: document.getElementById('mPriority').value,
+        done: false
+      };
+      if(!payload.title) return alert('Tiêu đề không được để trống');
+      addTask(payload); closeModal();
+    });
+  }
+
+  function openEditModal(id){
+    const t = tasks.find(x=>x.id === id); if(!t) return alert('Task not found');
+    const dueLocal = t.dueDate ? new Date(t.dueDate).toISOString().slice(0,16) : '';
+    const html = `
+      <div class="row">
+        <div class="col">
+          <input id="mTitle" value="${escapeHtml(t.title)}" placeholder="Tiêu đề" type="text" style="width:100%"/>
+        </div>
+        <div style="width:160px">
+          <input id="mCourse" value="${escapeHtml(t.course)}" placeholder="Môn / Nhóm" type="text" style="width:100%"/>
+        </div>
+      </div>
+      <div style="margin-top:8px" class="row">
+        <div class="col">
+          <label class="muted small">Due date (local)</label>
+          <input id="mDue" type="datetime-local" value="${dueLocal}" style="width:100%"/>
+        </div>
+        <div style="width:140px">
+          <label class="muted small">Duration (min)</label>
+          <input id="mDuration" type="number" min="5" step="5" value="${escapeHtml(String(t.durationMinutes||60))}" style="width:100%"/>
+        </div>
+        <div style="width:120px">
+          <label class="muted small">Priority</label>
+          <select id="mPriority" style="width:100%"><option ${t.priority==='Low'?'selected':''}>Low</option><option ${t.priority==='Medium'?'selected':''}>Medium</option><option ${t.priority==='High'?'selected':''}>High</option></select>
+        </div>
+      </div>
+      <div style="margin-top:8px">
+        <textarea id="mNotes" rows="4" style="width:100%">${escapeHtml(t.notes||'')}</textarea>
+      </div>
+      <div style="margin-top:10px;display:flex;justify-content:space-between;gap:8px">
+        <div><label><input id="mDone" type="checkbox" ${t.done ? 'checked' : ''}/> Done</label></div>
+        <div style="display:flex;gap:8px">
+          <button id="mDelete" class="btn-small btn-danger">Delete</button>
+          <button id="mCancel" class="btn-small">Cancel</button>
+          <button id="mSave" class="btn-primary">Save</button>
+        </div>
+      </div>
+    `;
+    showModal('Edit task', html, ()=>{});
+    document.getElementById('mCancel').addEventListener('click', closeModal);
+    document.getElementById('mDelete').addEventListener('click', ()=>{ closeModal(); removeTask(id); });
+    document.getElementById('mSave').addEventListener('click', ()=>{
+      const payload = {
+        title: (document.getElementById('mTitle').value||'').trim(),
+        notes: document.getElementById('mNotes').value||'',
+        course: (document.getElementById('mCourse').value||'Lớp chung').trim(),
+        dueDate: (()=>{ const v=document.getElementById('mDue').value; return v ? new Date(v).toISOString() : null; })(),
+        durationMinutes: Number(document.getElementById('mDuration').value) || 60,
+        priority: document.getElementById('mPriority').value,
+        done: !!document.getElementById('mDone').checked
+      };
+      if(!payload.title) return alert('Tiêu đề không được để trống');
+      updateTask(id, payload); closeModal();
+    });
+  }
+
+  // Utils
+  function escapeHtml(str){
+    if(!str) return '';
+    return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+  }
+
+  // Events
+  document.getElementById('btnAdd').addEventListener('click', openAddModal);
+  document.getElementById('seedBtn').addEventListener('click', ()=>{ if(confirm('Replace tasks with fresh 30 seeded tasks?')){ tasks = seedTasks(30); save(); render(); } });
+  document.getElementById('clearBtn').addEventListener('click', ()=>{ if(confirm('Clear ALL tasks?')){ tasks = []; save(); render(); }});
+  searchInput.addEventListener('input', (e)=>{ query = e.target.value; render(); });
+
+  function populateCourseFilter(){
+    const courses = allCourses();
+    filterCourseSelect.innerHTML = courses.map(c => `<option ${c===filterCourse?'selected':''}>${escapeHtml(c)}</option>`).join('');
+    filterCourseSelect.onchange = e => { filterCourse = e.target.value; render(); };
+  }
+
+  // Day/month keyboard navigation
+  document.addEventListener('keydown', (e)=> {
+    if(view !== 'Calendar') return;
+    if(e.key === 'ArrowLeft'){ calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth()-1,1); render(); }
+    if(e.key === 'ArrowRight'){ calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth()+1,1); render(); }
+  });
+
+  // Initial
+  load();
+  setView('List');
+  render();
+
+})();
+</script>
+</body>
+</html>
