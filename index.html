@@ -488,7 +488,7 @@
             ${daysUntil(t.dueDate)}<br>
             <div style="margin-top:8px">
               <button class="btn-small" data-action="edit" data-id="${t.id}">Edit</button>
-              <button class="btn-small btn-danger" data-action="delete" data-id="${t.id}">X</button>
+              <button class="btn-small btn-danger" data-action="delete" data-id="${t.id}">Delete</button>
             </div>
           </div>
         </div>
@@ -517,7 +517,7 @@
           <div style="margin-top:8px">
             <button class="btn-small" data-action="toggle" data-id="${t.id}">${t.done ? 'Undo' : 'Done'}</button>
             <button class="btn-small" data-action="edit" data-id="${t.id}">Edit</button>
-            <button class="btn-small btn-danger" data-action="delete" data-id="${t.id}">X</button>
+            <button class="btn-small btn-danger" data-action="delete" data-id="${t.id}">Delete</button>
           </div>`;
         grid.appendChild(c);
       });
@@ -587,7 +587,7 @@
     items.forEach(t=>{
       html += `<div class="task-card" style="margin-bottom:8px">
         <div class="space-between"><div><div class="task-title">${escapeHtml(t.title)}</div><div class="muted small">${escapeHtml(t.course||'—')} • ${formatDate(t.dueDate)}</div></div>
-          <div class="small muted"><button class="btn-small" data-id="${t.id}" data-act="edit">Edit</button> <button class="btn-small btn-danger" data-id="${t.id}" data-act="delete">X</button></div>
+          <div class="small muted"><button class="btn-small" data-id="${t.id}" data-act="edit">Edit</button> <button class="btn-small btn-danger" data-id="${t.id}" data-act="delete">Delete</button></div>
         </div>
         <div style="margin-top:8px" class="muted small">${escapeHtml(t.notes||'')}</div>
       </div>`;
@@ -661,7 +661,7 @@
       <div style="margin-top:8px"><textarea id="mNotes" rows="4" style="width:100%">${escapeHtml(t.notes||'')}</textarea></div>
       <div style="margin-top:10px;display:flex;justify-content:space-between;gap:8px">
         <div><label><input id="mDone" type="checkbox" ${t.done ? 'checked' : ''}/> Done</label></div>
-        <div style="display:flex;gap:8px"><button id="mDelete" class="btn-small btn-danger">X</button><button id="mCancel" class="btn-small">Cancel</button><button id="mSave" class="btn-primary">Save</button></div>
+        <div style="display:flex;gap:8px"><button id="mDelete" class="btn-small btn-danger">Delete</button><button id="mCancel" class="btn-small">Cancel</button><button id="mSave" class="btn-primary">Save</button></div>
       </div>
     `;
     showModal('Edit task', html);
